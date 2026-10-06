@@ -13,15 +13,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+    uses: actions/setup-python@v5
+    with:
+      python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-        
-      - name: Install pytest
-        run: python -m pip install pytest
+  - name: Install project dependencies
+    working-directory: security-checker
+    run: |
+      python -m pip install -r requirements.txt
 
-      - name: Run tests
-        run: python -m pytest
+  - name: Install pytest
+    working-directory: security-checker
+    run: |
+      python -m pip install pytest
+
+  - name: Run pytest
+    working-directory: security-checker
+    run: |
+      python -m pytest
