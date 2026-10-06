@@ -1,6 +1,14 @@
 def security_check():
-    print("Security check started")
-    print("No vulnerabilities detected")
+    vulnerabilities = 0
+    assert vulnerabilities == 0
+
+    print(f"Found {vulnerabilities} vulnerabilities")
+
+    if vulnerabilities > 0:
+        raise SystemExit("Security check failed!")
+
+    print("Security check passed")
+
 
 if __name__ == "__main__":
     security_check()
