@@ -1,5 +1,5 @@
 def security_check():
-    vulnerabilities = 0
+    vulnerabilities = 1
     assert vulnerabilities == 0
 
     print(f"Found {vulnerabilities} vulnerabilities")
