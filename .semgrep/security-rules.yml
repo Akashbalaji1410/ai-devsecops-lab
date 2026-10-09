@@ -1,0 +1,9 @@
+rules:
+  - id: dangerous-dynamic-execution
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+    message: "Avoid eval() and exec() because they can execute attacker-controlled code."
+    severity: ERROR
+    languages:
+      - python
