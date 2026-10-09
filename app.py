@@ -8,11 +8,7 @@ def security_check():
 
     print("Security check passed")
 
-def dangerous_function(user_input):
-    return eval(user_input)
-
-
-# def run_command(user_input):
+# def dangerous_function(user_input):
 #     return eval(user_input)
 
 # def get_user(cursor, username):
