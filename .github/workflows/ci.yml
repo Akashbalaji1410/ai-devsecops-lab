@@ -23,7 +23,7 @@ jobs:
       - name: Run Semgrep across all Python files
         run: >-
           semgrep scan
-          --config .semgrep/security-rules.yml
+          --config p/python
           --include "*.py"
           --json
           --output semgrep-results.json
