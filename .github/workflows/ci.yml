@@ -20,8 +20,13 @@ jobs:
       - name: Install Semgrep
         run: python -m pip install semgrep
 
-      - name: Run Semgrep and export JSON
-        run: semgrep scan --config .semgrep/security-rules.yml --json --output semgrep-results.json
+      - name: Run Semgrep across all Python files
+        run: >-
+          semgrep scan
+          --config .semgrep/security-rules.yml
+          --include "*.py"
+          --json
+          --output semgrep-results.json
 
       - name: Upload Semgrep JSON report
         if: always()
