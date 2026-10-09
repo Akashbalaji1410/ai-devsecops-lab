@@ -3,10 +3,15 @@ rules:
     pattern-either:
       - pattern: eval(...)
       - pattern: exec(...)
-    message: "Avoid eval() and exec() because they can execute attacker-controlled code. CWE-95."
+    message: "Avoid unsafe dynamic execution."
     severity: ERROR
     languages:
       - python
+    metadata:
+      cwe:
+        - "CWE-95"
+      category: security
+      
   - id: python-sql-injection
     pattern: cursor.execute(...)
     message: "Review SQL execution for potential SQL injection. CWE-89."
