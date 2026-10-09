@@ -3,7 +3,13 @@ rules:
     pattern-either:
       - pattern: eval(...)
       - pattern: exec(...)
-    message: "Avoid eval() and exec() because they can execute attacker-controlled code."
+    message: "Avoid eval() and exec() because they can execute attacker-controlled code. CWE-95."
+    severity: ERROR
+    languages:
+      - python
+  - id: python-sql-injection
+    pattern: cursor.execute(...)
+    message: "Review SQL execution for potential SQL injection. CWE-89."
     severity: ERROR
     languages:
       - python
