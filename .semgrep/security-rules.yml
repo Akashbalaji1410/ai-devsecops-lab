@@ -11,7 +11,7 @@ rules:
       cwe:
         - "CWE-95"
       category: security
-      
+  
   - id: python-sql-injection
     pattern: cursor.execute(...)
     message: "Review SQL execution for potential SQL injection. CWE-89."
