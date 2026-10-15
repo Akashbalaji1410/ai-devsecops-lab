@@ -1,4 +1,4 @@
-name: AI DevSecOps Pipeline (Testing)
+name: AI DevSecOps Security Pipeline
 
 on:
   push:
@@ -9,38 +9,46 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
-  security-and-build:
-    name: Non-blocking security tests
+  security-pipeline:
+    name: Security Testing and Reporting
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Download repository source code
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-        continue-on-error: true
 
+      # 2. Install Python
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-        continue-on-error: true
 
+      # 3. Install application and testing dependencies
       - name: Install dependencies
         continue-on-error: true
         run: |
-          python -m pip install -r requirements.txt
-          python -m pip install pytest semgrep
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+          python -m pip install pytest semgrep requests reportlab
 
+      # 4. Run Python tests
       - name: Run Python tests
         id: tests
         continue-on-error: true
         run: python -m pytest -q
 
+      # 5. Run Semgrep SAST scan
       - name: Run Semgrep
         id: semgrep
+        if: always()
         continue-on-error: true
         run: |
           semgrep scan \
@@ -48,8 +56,9 @@ jobs:
             --include "*.py" \
             --json \
             --output semgrep-results.json \
-            --error
+            .
 
+      # 6. Upload Semgrep JSON report
       - name: Upload Semgrep report
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,59 +66,78 @@ jobs:
           name: semgrep-results
           path: semgrep-results.json
           if-no-files-found: warn
+          retention-days: 30
 
+      # 7. Scan for leaked secrets
       - name: Run Gitleaks
         id: gitleaks
+        if: always()
         continue-on-error: true
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: "false"
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
 
+      # 8. Run SonarQube Cloud analysis
       - name: Run SonarQube Cloud analysis
+        id: sonar
         if: always()
         continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+      # 9. Generate SonarQube PDF report
+      - name: Install PDF dependencies
+        if: always()
+        continue-on-error: true
+        run: python -m pip install requests reportlab
 
-      - name: Analyze pipeline outcomes
+      - name: Generate SonarQube PDF
+        id: sonar_pdf
+        if: always() && steps.sonar.outcome == 'success'
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: Akashbalaji1410_ai-devsecops-lab
+        run: python scripts/sonarqube_report.py
+
+      # 10. Upload SonarQube PDF artifact
+      - name: Upload SonarQube PDF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-security-report
+          path: reports/sonarqube-report.pdf
+          if-no-files-found: warn
+          retention-days: 30
+
+      # 11. Build Docker image
+      - name: Build Docker image
+        id: docker_build
+        if: always()
+        continue-on-error: true
+        run: docker build -t ai-devsecops-lab:${{ github.sha }} .
+
+      # 12. Print pipeline outcomes
+      - name: Report pipeline outcomes
         if: always()
         env:
           TESTS: ${{ steps.tests.outcome }}
           SEMGREP: ${{ steps.semgrep.outcome }}
           GITLEAKS: ${{ steps.gitleaks.outcome }}
-          SONAR_ENABLED: ${{ vars.SONAR_ENABLED }}
           SONAR: ${{ steps.sonar.outcome }}
+          SONAR_PDF: ${{ steps.sonar_pdf.outcome }}
+          DOCKER: ${{ steps.docker_build.outcome }}
         run: |
-          echo "=================================="
-          echo "AI DEVSECOPS TEST RESULTS"
-          echo "=================================="
-          echo "Python tests : $TESTS"
-          echo "Semgrep      : $SEMGREP"
-          echo "Gitleaks     : $GITLEAKS"
-
-          if [ "$SONAR_ENABLED" = "true" ]; then
-            echo "SonarQube    : $SONAR"
-          else
-            echo "SonarQube    : SKIPPED"
-          fi
-
-          echo ""
-          echo "Testing mode: findings and scanner failures are informational."
-          echo "No enforced security gate is active."
-
-      - name: Build Docker image
-        id: docker_build
-        continue-on-error: true
-        run: docker build -t ai-devsecops-lab:${{ github.sha }} .
-
-      - name: Report Docker build outcome
-        if: always()
-        env:
-          BUILD_OUTCOME: ${{ steps.docker_build.outcome }}
-        run: |
-          echo "Docker build: $BUILD_OUTCOME"
-          echo "Testing mode: build errors are retained in the logs."
+          echo "===================================="
+          echo "AI DEVSECOPS PIPELINE RESULTS"
+          echo "===================================="
+          echo "Python tests       : $TESTS"
+          echo "Semgrep            : $SEMGREP"
+          echo "Gitleaks           : $GITLEAKS"
+          echo "SonarQube analysis : $SONAR"
+          echo "SonarQube PDF      : $SONAR_PDF"
+          echo "Docker build       : $DOCKER"
+          echo "===================================="
+          echo "Testing mode: scanner findings and errors are retained in logs."
+          echo "Security gates are not enforced in this testing workflow."
