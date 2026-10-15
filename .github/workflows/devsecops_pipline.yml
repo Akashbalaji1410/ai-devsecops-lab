@@ -1,0 +1,113 @@
+name: AI DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest semgrep
+
+      - name: Run tests
+        id: tests
+        continue-on-error: true
+        run: python -m pytest -q
+
+      - name: Run Semgrep
+        id: semgrep
+        continue-on-error: true
+        run: |
+          semgrep scan \
+            --config p/python \
+            --include "*.py" \
+            --json \
+            --output semgrep-results.json \
+            --error
+
+      - name: Upload Semgrep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+          if-no-files-found: warn
+
+      - name: Run Gitleaks
+        id: gitleaks
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+
+      - name: Run SonarQube analysis
+        id: sonar
+        if: vars.SONAR_ENABLED == 'true'
+        continue-on-error: true
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: Enforce quality and security gate
+        id: gate
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          SEMGREP_OUTCOME: ${{ steps.semgrep.outcome }}
+          GITLEAKS_OUTCOME: ${{ steps.gitleaks.outcome }}
+          SONAR_ENABLED: ${{ vars.SONAR_ENABLED }}
+          SONAR_OUTCOME: ${{ steps.sonar.outcome }}
+        run: |
+          failed=0
+
+          for result in \
+            "$TEST_OUTCOME" \
+            "$SEMGREP_OUTCOME" \
+            "$GITLEAKS_OUTCOME"
+          do
+            if [ "$result" != "success" ]; then
+              echo "Required check failed: $result"
+              failed=1
+            fi
+          done
+
+          if [ "$SONAR_ENABLED" = "true" ] && \
+             [ "$SONAR_OUTCOME" != "success" ]; then
+            echo "SonarQube analysis failed."
+            failed=1
+          fi
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Quality/security gate failed."
+            exit 1
+          fi
+
+          echo "All required checks passed."
+
+      - name: Build Docker image
+        if: success()
+        run: docker build -t ai-devsecops-lab:${{ github.sha }} .

@@ -1,0 +1,16 @@
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - web-data:/usr/share/nginx/html
+    networks:
+      - devsecops-net
+
+volumes:
+  web-data:
+
+networks:
+  devsecops-net:
+    driver: bridge
