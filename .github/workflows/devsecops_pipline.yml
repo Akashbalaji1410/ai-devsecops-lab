@@ -69,7 +69,7 @@ jobs:
 
       - name: Run SonarQube analysis
         id: sonar
-        if: ${{ always() && vars.SONAR_ENABLED == 'true' }}
+        if: always()
         continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@v6
         env:
