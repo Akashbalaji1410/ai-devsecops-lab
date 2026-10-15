@@ -67,14 +67,12 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
 
-      - name: Run SonarQube analysis
-        id: sonar
+      - name: Run SonarQube Cloud analysis
         if: always()
         continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
       - name: Analyze pipeline outcomes
         if: always()
