@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   security-and-build:
-    name: Non-blocking security tests
+    name: Non blocking security tests
     runs-on: ubuntu-latest
 
     steps:
@@ -73,6 +73,7 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
 
       - name: Analyze pipeline outcomes
         if: always()
