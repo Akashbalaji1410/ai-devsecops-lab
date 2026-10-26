@@ -1,0 +1,443 @@
+[1mdiff --git a/run_all_scans.py b/run_all_scans.py[m
+[1mnew file mode 100644[m
+[1mindex 0000000..b92f8f0[m
+[1m--- /dev/null[m
+[1m+++ b/run_all_scans.py[m
+[36m@@ -0,0 +1,81 @@[m
+[32m+[m
+[32m+[m[32mimport subprocess[m
+[32m+[m[32mimport sys[m
+[32m+[m[32mfrom pathlib import Path[m
+[32m+[m[32mfrom datetime import datetime[m
+[32m+[m
+[32m+[m[32m# Main project directory[m
+[32m+[m[32mPROJECT_DIR = Path(__file__).resolve().parent[m
+[32m+[m
+[32m+[m[32m# Folder containing your four Python scripts[m
+[32m+[m[32mSCRIPTS_DIR = PROJECT_DIR / "scripts"[m
+[32m+[m
+[32m+[m[32m# Replace these with your actual Python filenames[m
+[32m+[m[32mPYTHON_FILES = [[m
+[32m+[m[32m    "run_gitleaks.py",[m
+[32m+[m[32m    "run_trivy_all.py",[m
+[32m+[m[32m    "normalize_all_findings.py",[m
+[32m+[m[32m][m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef run_script(filename):[m
+[32m+[m[32m    script_path = SCRIPTS_DIR / filename[m
+[32m+[m
+[32m+[m[32m    print("\n" + "=" * 60)[m
+[32m+[m[32m    print(f"Running: {filename}")[m
+[32m+[m[32m    print("=" * 60)[m
+[32m+[m
+[32m+[m[32m    if not script_path.is_file():[m
+[32m+[m[32m        print(f"ERROR: Script not found: {script_path}")[m
+[32m+[m[32m        return False[m
+[32m+[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        result = subprocess.run([m
+[32m+[m[32m            [sys.executable, str(script_path)],[m
+[32m+[m[32m            cwd=str(PROJECT_DIR),[m
+[32m+[m[32m            check=False[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        if result.returncode == 0:[m
+[32m+[m[32m            print(f"SUCCESS: {filename}")[m
+[32m+[m[32m            return True[m
+[32m+[m
+[32m+[m[32m        print([m
+[32m+[m[32m            f"FAILED: {filename} "[m
+[32m+[m[32m            f"(exit code: {result.returncode})"[m
+[32m+[m[32m        )[m
+[32m+[m[32m        return False[m
+[32m+[m
+[32m+[m[32m    except OSError as error:[m
+[32m+[m[32m        print(f"ERROR: {error}")[m
+[32m+[m[32m        return False[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef main():[m
+[32m+[m[32m    start_time = datetime.now()[m
+[32m+[m[32m    results = {}[m
+[32m+[m
+[32m+[m[32m    print("AI DevSecOps - Scan Automation")[m
+[32m+[m[32m    print(f"Project: {PROJECT_DIR}")[m
+[32m+[m[32m    print(f"Scripts: {SCRIPTS_DIR}")[m
+[32m+[m
+[32m+[m[32m    for filename in PYTHON_FILES:[m
+[32m+[m[32m        results[filename] = run_script(filename)[m
+[32m+[m
+[32m+[m[32m    print("\n" + "=" * 60)[m
+[32m+[m[32m    print("FINAL SUMMARY")[m
+[32m+[m[32m    print("=" * 60)[m
+[32m+[m
+[32m+[m[32m    for filename, success in results.items():[m
+[32m+[m[32m        print(f"{filename}: {'SUCCESS' if success else 'FAILED'}")[m
+[32m+[m
+[32m+[m[32m    print(f"\nDuration: {datetime.now() - start_time}")[m
+[32m+[m
+[32m+[m[32m    if all(results.values()):[m
+[32m+[m[32m        print("All scripts completed successfully.")[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        print("One or more scripts failed. Review the errors above.")[m
+[32m+[m
+[32m+[m
+[32m+[m[32mif __name__ == "__main__":[m
+[32m+[m[32m    main()[m
+[1mdiff --git a/scripts/normalize_all_findings.py b/scripts/normalize_all_findings.py[m
+[1mnew file mode 100644[m
+[1mindex 0000000..54b73f9[m
+[1m--- /dev/null[m
+[1m+++ b/scripts/normalize_all_findings.py[m
+[36m@@ -0,0 +1,585 @@[m
+[32m+[m
+[32m+[m[32m# scripts/normalize_all_findings.py[m
+[32m+[m
+[32m+[m[32mimport json[m
+[32m+[m[32mfrom datetime import datetime, timezone[m
+[32m+[m[32mfrom pathlib import Path[m
+[32m+[m[32mfrom xml.sax.saxutils import escape[m
+[32m+[m
+[32m+[m[32mfrom reportlab.lib import colors[m
+[32m+[m[32mfrom reportlab.lib.enums import TA_CENTER[m
+[32m+[m[32mfrom reportlab.lib.pagesizes import A4[m
+[32m+[m[32mfrom reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle[m
+[32m+[m[32mfrom reportlab.lib.units import mm[m
+[32m+[m[32mfrom reportlab.platypus import ([m
+[32m+[m[32m    SimpleDocTemplate,[m
+[32m+[m[32m    Paragraph,[m
+[32m+[m[32m    Spacer,[m
+[32m+[m[32m    Table,[m
+[32m+[m[32m    TableStyle,[m
+[32m+[m[32m    PageBreak,[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mROOT = Path(__file__).resolve().parent.parent[m
+[32m+[m[32mRESULTS_DIR = ROOT / "scan-results"[m
+[32m+[m[32mRESULTS_DIR.mkdir(parents=True, exist_ok=True)[m
+[32m+[m
+[32m+[m[32mTRIVY_FILE = RESULTS_DIR / "trivy-results.json"[m
+[32m+[m[32mGITLEAKS_FILE = RESULTS_DIR / "gitleaks-results.json"[m
+[32m+[m[32mGITLEAKS_SARIF_FILE = RESULTS_DIR / "results.sarif"[m
+[32m+[m
+[32m+[m[32mOUTPUT_JSON = RESULTS_DIR / "normalized-security-findings.json"[m
+[32m+[m[32mOUTPUT_PDF = RESULTS_DIR / "security-findings-report.pdf"[m
+[32m+[m
+[32m+[m[32mfindings = [][m
+[32m+[m[32msource_status = {}[m
+[32m+[m[32merrors = [][m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef read_json(path):[m
+[32m+[m[32m    """Read a JSON file with UTF-8 and Windows-1252 fallback support."""[m
+[32m+[m[32m    path = Path(path)[m
+[32m+[m
+[32m+[m[32m    if not path.exists():[m
+[32m+[m[32m        return None, f"File not found: {path}"[m
+[32m+[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        with path.open("r", encoding="utf-8-sig") as file:[m
+[32m+[m[32m            return json.load(file), None[m
+[32m+[m
+[32m+[m[32m    except UnicodeDecodeError as exc:[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            with path.open("r", encoding="cp1252") as file:[m
+[32m+[m[32m                data = json.load(file)[m
+[32m+[m
+[32m+[m[32m            print([m
+[32m+[m[32m                f"[WARNING] {path.name} decoded using Windows-1252. "[m
+[32m+[m[32m                "Check why the scanner output is not UTF-8."[m
+[32m+[m[32m            )[m
+[32m+[m[32m            return data, None[m
+[32m+[m
+[32m+[m[32m        except (UnicodeDecodeError, json.JSONDecodeError) as fallback_exc:[m
+[32m+[m[32m            return None, ([m
+[32m+[m[32m                f"Could not decode valid JSON from {path}. "[m
+[32m+[m[32m                f"UTF-8 error: {exc}. "[m
+[32m+[m[32m                f"Fallback error: {fallback_exc}"[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m    except json.JSONDecodeError as exc:[m
+[32m+[m[32m        return None, ([m
+[32m+[m[32m            f"Invalid JSON in {path} at line {exc.lineno}, "[m
+[32m+[m[32m            f"column {exc.colno}: {exc.msg}"[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    except OSError as exc:[m
+[32m+[m[32m        return None, f"Could not read {path}: {exc}"[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef text_value(value, default=""):[m
+[32m+[m[32m    """Convert values safely to strings."""[m
+[32m+[m[32m    if value is None:[m
+[32m+[m[32m        return default[m
+[32m+[m[32m    return str(value)[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef add_finding([m
+[32m+[m[32m    scanner,[m
+[32m+[m[32m    finding_id,[m
+[32m+[m[32m    title,[m
+[32m+[m[32m    severity,[m
+[32m+[m[32m    path="",[m
+[32m+[m[32m    line=None,[m
+[32m+[m[32m    message="",[m
+[32m+[m[32m    remediation="",[m
+[32m+[m[32m    source="",[m
+[32m+[m[32m    cve=None,[m
+[32m+[m[32m    package=None,[m
+[32m+[m[32m    installed_version=None,[m
+[32m+[m[32m    fixed_version=None,[m
+[32m+[m[32m    confidence=None,[m
+[32m+[m[32m):[m
+[32m+[m[32m    """Append one finding using the shared project schema."""[m
+[32m+[m[32m    findings.append({[m
+[32m+[m[32m        "scanner": scanner,[m
+[32m+[m[32m        "finding_id": text_value(finding_id, "UNKNOWN"),[m
+[32m+[m[32m        "title": text_value(title, "Untitled finding"),[m
+[32m+[m[32m        "severity": text_value(severity, "UNKNOWN").upper(),[m
+[32m+[m[32m        "path": text_value(path),[m
+[32m+[m[32m        "line": line,[m
+[32m+[m[32m        "message": text_value(message),[m
+[32m+[m[32m        "remediation": text_value(remediation),[m
+[32m+[m[32m        "source": text_value(source),[m
+[32m+[m[32m        "cve": text_value(cve) if cve else None,[m
+[32m+[m[32m        "package": text_value(package) if package else None,[m
+[32m+[m[32m        "installed_version": ([m
+[32m+[m[32m            text_value(installed_version) if installed_version else None[m
+[32m+[m[32m        ),[m
+[32m+[m[32m        "fixed_version": text_value(fixed_version) if fixed_version else None,[m
+[32m+[m[32m        "confidence": text_value(confidence) if confidence else None,[m
+[32m+[m[32m    })[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef normalize_trivy():[m
+[32m+[m[32m    """Normalize Trivy vulnerabilities, misconfigurations, secrets and licenses."""[m
+[32m+[m[32m    data, error = read_json(TRIVY_FILE)[m
+[32m+[m
+[32m+[m[32m    if error:[m
+[32m+[m[32m        source_status["trivy"] = {[m
+[32m+[m[32m            "status": "missing_or_invalid",[m
+[32m+[m[32m            "error": error,[m
+[32m+[m[32m        }[m
+[32m+[m[32m        errors.append(error)[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    if not isinstance(data, dict) or not isinstance(data.get("Results"), list):[m
+[32m+[m[32m        error = "Trivy JSON does not contain a valid Results array."[m
+[32m+[m[32m        source_status["trivy"] = {"status": "invalid", "error": error}[m
+[32m+[m[32m        errors.append(error)[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    workflow = data.get("WorkflowMetadata") or {}[m
+[32m+[m[32m    workflow_status = workflow.get("status", "unknown")[m
+[32m+[m[32m    workflow_errors = workflow.get("errors", [])[m
+[32m+[m
+[32m+[m[32m    if workflow_status != "complete" or workflow_errors:[m
+[32m+[m[32m        errors.append("Trivy workflow is incomplete or reports scan errors.")[m
+[32m+[m
+[32m+[m[32m    count_before = len(findings)[m
+[32m+[m
+[32m+[m[32m    for result in data.get("Results", []):[m
+[32m+[m[32m        if not isinstance(result, dict):[m
+[32m+[m[32m            continue[m
+[32m+[m
+[32m+[m[32m        target = result.get("Target", "")[m
+[32m+[m[32m        source = result.get("_ScanSource", target or "filesystem")[m
+[32m+[m
+[32m+[m[32m        for vuln in result.get("Vulnerabilities") or []:[m
+[32m+[m[32m            vuln_id = vuln.get("VulnerabilityID", "UNKNOWN")[m
+[32m+[m[32m            package = vuln.get("PkgName", "")[m
+[32m+[m[32m            installed = vuln.get("InstalledVersion", "")[m
+[32m+[m[32m            fixed = vuln.get("FixedVersion", "")[m
+[32m+[m[32m            title = vuln.get("Title") or f"{vuln_id} in {package}"[m
+[32m+[m
+[32m+[m[32m            add_finding([m
+[32m+[m[32m                scanner="Trivy",[m
+[32m+[m[32m                finding_id=vuln_id,[m
+[32m+[m[32m                title=title,[m
+[32m+[m[32m                severity=vuln.get("Severity", "UNKNOWN"),[m
+[32m+[m[32m                path=target,[m
+[32m+[m[32m                message=vuln.get("Description", ""),[m
+[32m+[m[32m                remediation=([m
+[32m+[m[32m                    f"Upgrade {package} from {installed} to {fixed}."[m
+[32m+[m[32m                    if package and fixed[m
+[32m+[m[32m                    else "Review the advisory and identify a supported fix."[m
+[32m+[m[32m                ),[m
+[32m+[m[32m                source=source,[m
+[32m+[m[32m                cve=vuln_id if vuln_id.startswith("CVE-") else None,[m
+[32m+[m[32m                package=package,[m
+[32m+[m[32m                installed_version=installed,[m
+[32m+[m[32m                fixed_version=fixed or None,[m
+[32m+[m[32m                confidence=vuln.get("PrimaryURL"),[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m        for misconfig in result.get("Misconfigurations") or []:[m
+[32m+[m[32m            add_finding([m
+[32m+[m[32m                scanner="Trivy",[m
+[32m+[m[32m                finding_id=misconfig.get("ID", "UNKNOWN"),[m
+[32m+[m[32m                title=misconfig.get("Title", "Configuration issue"),[m
+[32m+[m[32m                severity=misconfig.get("Severity", "UNKNOWN"),[m
+[32m+[m[32m                path=misconfig.get("FilePath") or target,[m
+[32m+[m[32m                line=(misconfig.get("CauseMetadata") or {}).get("StartLine"),[m
+[32m+[m[32m                message=misconfig.get("Message", ""),[m
+[32m+[m[32m                remediation=misconfig.get("Resolution", ""),[m
+[32m+[m[32m                source=source,[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m        for secret in result.get("Secrets") or []:[m
+[32m+[m[32m            # Never include the detected secret value or matched text.[m
+[32m+[m[32m            add_finding([m
+[32m+[m[32m                scanner="Trivy",[m
+[32m+[m[32m                finding_id=secret.get("RuleID", "UNKNOWN"),[m
+[32m+[m[32m                title=secret.get("Title", "Potential secret detected"),[m
+[32m+[m[32m                severity=secret.get("Severity", "UNKNOWN"),[m
+[32m+[m[32m                path=secret.get("Target") or target,[m
+[32m+[m[32m                line=secret.get("StartLine"),[m
+[32m+[m[32m                message="Potential secret detected. Value omitted from this report.",[m
+[32m+[m[32m                remediation=secret.get([m
+[32m+[m[32m                    "Resolution",[m
+[32m+[m[32m                    "Rotate the credential if valid and remove it from source.",[m
+[32m+[m[32m                ),[m
+[32m+[m[32m                source=source,[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m        for license_finding in result.get("Licenses") or []:[m
+[32m+[m[32m            add_finding([m
+[32m+[m[32m                scanner="Trivy",[m
+[32m+[m[32m                finding_id=license_finding.get("Name", "LICENSE"),[m
+[32m+[m[32m                title=license_finding.get("Name", "License finding"),[m
+[32m+[m[32m                severity=license_finding.get("Severity", "UNKNOWN"),[m
+[32m+[m[32m                path=target,[m
+[32m+[m[32m                message=license_finding.get("Category", ""),[m
+[32m+[m[32m                remediation=([m
+[32m+[m[32m                    "Review the license against your organization's policy."[m
+[32m+[m[32m                ),[m
+[32m+[m[32m                source=source,[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m    source_status["trivy"] = {[m
+[32m+[m[32m        "status": workflow_status,[m
+[32m+[m[32m        "finding_count": len(findings) - count_before,[m
+[32m+[m[32m        "scan_count": len(workflow.get("scans", [])),[m
+[32m+[m[32m        "errors": workflow_errors,[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef normalize_gitleaks_json():[m
+[32m+[m[32m    """Normalize Gitleaks JSON without exposing secret values."""[m
+[32m+[m[32m    data, error = read_json(GITLEAKS_FILE)[m
+[32m+[m
+[32m+[m[32m    if error:[m
+[32m+[m[32m        source_status["gitleaks"] = {[m
+[32m+[m[32m            "status": "missing_or_invalid",[m
+[32m+[m[32m            "error": error,[m
+[32m+[m[32m        }[m
+[32m+[m[32m        errors.append(error)[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    if not isinstance(data, list):[m
+[32m+[m[32m        error = "Gitleaks JSON must be an array."[m
+[32m+[m[32m        source_status["gitleaks"] = {"status": "invalid", "error": error}[m
+[32m+[m[32m        errors.append(error)[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    count_before = len(findings)[m
+[32m+[m
+[32m+[m[32m    for item in data:[m
+[32m+[m[32m        if not isinstance(item, dict):[m
+[32m+[m[32m            continue[m
+[32m+[m
+[32m+[m[32m        # Never copy Secret, Match, or other credential-bearing fields.[m
+[32m+[m[32m        add_finding([m
+[32m+[m[32m            scanner="Gitleaks",[m
+[32m+[m[32m            finding_id=item.get("RuleID", "UNKNOWN"),[m
+[32m+[m[32m            title=item.get("Description") or item.get([m
+[32m+[m[32m                "RuleID", "Potential secret"[m
+[32m+[m[32m            ),[m
+[32m+[m[32m            severity=item.get("Severity", "UNKNOWN"),[m
+[32m+[m[32m            path=item.get("File", ""),[m
+[32m+[m[32m            line=item.get("StartLine"),[m
+[32m+[m[32m            message="Potential secret detected. Secret contents omitted.",[m
+[32m+[m[32m            remediation=([m
+[32m+[m[32m                "Validate securely, revoke or rotate if real, then remove "[m
+[32m+[m[32m                "it from files and Git history."[m
+[32m+[m[32m            ),[m
+[32m+[m[32m            source=item.get("_ScanSource", "gitleaks"),[m
+[32m+[m[32m            confidence=item.get("Fingerprint"),[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    source_status["gitleaks"] = {[m
+[32m+[m[32m        "status": "loaded",[m
+[32m+[m[32m        "finding_count": len(findings) - count_before,[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef normalize_gitleaks_sarif():[m
+[32m+[m[32m    """Normalize Gitleaks SARIF when its JSON report is unavailable."""[m
+[32m+[m[32m    data, error = read_json(GITLEAKS_SARIF_FILE)[m
+[32m+[m
+[32m+[m[32m    if error:[m
+[32m+[m[32m        message = "Gitleaks JSON and SARIF reports are both unavailable."[m
+[32m+[m[32m        source_status["gitleaks"] = {[m
+[32m+[m[32m            "status": "missing",[m
+[32m+[m[32m            "error": message,[m
+[32m+[m[32m        }[m
+[32m+[m[32m        errors.append(message)[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    runs = data.get("runs", []) if isinstance(data, dict) else [][m
+[32m+[m
+[32m+[m[32m    if not runs:[m
+[32m+[m[32m        error = "Gitleaks SARIF has no runs."[m
+[32m+[m[32m        source_status["gitleaks"] = {"status": "invalid", "error": error}[m
+[32m+[m[32m        errors.append(error)[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    count_before = len(findings)[m
+[32m+[m
+[32m+[m[32m    for run in runs:[m
+[32m+[m[32m        driver = run.get("tool", {}).get("driver", {})[m
+[32m+[m[32m        rules = {[m
+[32m+[m[32m            rule.get("id"): rule[m
+[32m+[m[32m            for rule in driver.get("rules", [])[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        for item in run.get("results", []):[m
+[32m+[m[32m            rule_id = item.get("ruleId", "UNKNOWN")[m
+[32m+[m[32m            rule = rules.get(rule_id, {})[m
+[32m+[m[32m            locations = item.get("locations") or [][m
+[32m+[m
+[32m+[m[32m            physical = ([m
+[32m+[m[32m                locations[0].get("physicalLocation", {})[m
+[32m+[m[32m                if locations[m
+[32m+[m[32m                else {}[m
+[32m+[m[32m            )[m
+[32m+[m[32m            artifact = physical.get("artifactLocation", {})[m
+[32m+[m[32m            region = physical.get("region", {})[m
+[32m+[m
+[32m+[m[32m            short_description = rule.get("shortDescription") or {}[m
+[32m+[m
+[32m+[m[32m            add_finding([m
+[32m+[m[32m                scanner="Gitleaks",[m
+[32m+[m[32m                finding_id=rule_id,[m
+[32m+[m[32m                title=short_description.get("text", rule_id),[m
+[32m+[m[32m                severity="UNKNOWN",[m
+[32m+[m[32m                path=artifact.get("uri", ""),[m
+[32m+[m[32m                line=region.get("startLine"),[m
+[32m+[m[32m                message="Potential secret detected. Secret contents omitted.",[m
+[32m+[m[32m                remediation=([m
+[32m+[m[32m                    "Validate securely, revoke or rotate if real, then "[m
+[32m+[m[32m                    "remove it from files and Git history."[m
+[32m+[m[32m                ),[m
+[32m+[m[32m                source="gitleaks-sarif",[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m    source_status["gitleaks"] = {[m
+[32m+[m[32m        "status": "loaded_from_sarif",[m
+[32m+[m[32m        "finding_count": len(findings) - count_before,[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m
+[32m+[m[3
