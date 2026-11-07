@@ -1,0 +1,127 @@
+{
+  "tool": "custom-risk-correlation-engine",
+  "synthetic_data": true,
+  "environment": "ai-devsecops-demo",
+  "generated_at": "2026-11-07T04:45:39.797065+00:00",
+  "summary": {
+    "raw_findings": 6,
+    "unique_findings": 5,
+    "duplicates_removed": 1,
+    "priority_counts": {
+      "P1": 1,
+      "P2": 3,
+      "P3": 1,
+      "P4": 0
+    },
+    "severity_counts": {
+      "Critical": 3,
+      "High": 2,
+      "Medium": 0,
+      "Low": 0,
+      "Info": 0
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "CVE-2099-0001",
+      "source": "Trivy",
+      "resource": "sample-app/requirements.txt",
+      "severity": "High",
+      "cvss": 8.1,
+      "kev": true,
+      "asset_criticality": "critical",
+      "exposure": "internet",
+      "fix_available": true,
+      "title": "Synthetic vulnerable dependency",
+      "recommendation": "Upgrade the affected dependency.",
+      "sources": [
+        "Trivy",
+        "Supply Chain Analyzer"
+      ],
+      "duplicate_count": 1,
+      "risk_score": 92,
+      "priority": "P1",
+      "status": "OPEN"
+    },
+    {
+      "finding_id": "SEC-001",
+      "source": "Gitleaks",
+      "resource": "src/config.py",
+      "severity": "Critical",
+      "cvss": 9.0,
+      "kev": false,
+      "asset_criticality": "critical",
+      "exposure": "internet",
+      "fix_available": true,
+      "title": "Synthetic exposed credential",
+      "recommendation": "Remove the synthetic secret and review rotation procedures.",
+      "sources": [
+        "Gitleaks"
+      ],
+      "duplicate_count": 0,
+      "risk_score": 71,
+      "priority": "P2",
+      "status": "OPEN"
+    },
+    {
+      "finding_id": "APP-001",
+      "source": "Semgrep",
+      "resource": "src/app.py",
+      "severity": "Critical",
+      "cvss": 9.8,
+      "kev": false,
+      "asset_criticality": "high",
+      "exposure": "internet",
+      "fix_available": true,
+      "title": "Synthetic SQL injection",
+      "recommendation": "Use parameterized queries.",
+      "sources": [
+        "Semgrep"
+      ],
+      "duplicate_count": 0,
+      "risk_score": 70,
+      "priority": "P2",
+      "status": "OPEN"
+    },
+    {
+      "finding_id": "NET-001",
+      "source": "AWS Network Analyzer",
+      "resource": "sg-demo-web",
+      "severity": "Critical",
+      "cvss": 8.5,
+      "kev": false,
+      "asset_criticality": "critical",
+      "exposure": "internet",
+      "fix_available": true,
+      "title": "Unrestricted SSH access",
+      "recommendation": "Restrict inbound SSH access.",
+      "sources": [
+        "AWS Network Analyzer"
+      ],
+      "duplicate_count": 0,
+      "risk_score": 69,
+      "priority": "P2",
+      "status": "OPEN"
+    },
+    {
+      "finding_id": "ENC-001",
+      "source": "AWS Encryption Analyzer",
+      "resource": "key-demo-001",
+      "severity": "High",
+      "cvss": 7.5,
+      "kev": false,
+      "asset_criticality": "high",
+      "exposure": "internal",
+      "fix_available": true,
+      "title": "KMS key disabled",
+      "recommendation": "Review the key state.",
+      "sources": [
+        "AWS Encryption Analyzer"
+      ],
+      "duplicate_count": 0,
+      "risk_score": 56,
+      "priority": "P3",
+      "status": "OPEN"
+    }
+  ]
+}
