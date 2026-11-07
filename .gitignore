@@ -2,3 +2,9 @@
 __pycache__/
 *.pyc
 .env
+# Local signing secrets
+**/cosign.key
+**/keys/*.key
+
+# Local signing and verification artifacts
+supply-chain-lab/artifact-integrity/results/

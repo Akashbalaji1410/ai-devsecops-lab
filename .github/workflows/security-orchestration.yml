@@ -1,0 +1,396 @@
+
+name: AI DevSecOps Security Orchestration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Semgrep
+        run: python -m pip install semgrep
+
+      - name: Run Semgrep
+        id: scan
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p results/semgrep
+
+          semgrep scan \
+            --config auto \
+            --json \
+            --output results/semgrep/semgrep.json \
+            . 
+
+      - name: Record execution status
+        if: always()
+        shell: bash
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          mkdir -p results/semgrep
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path("results/semgrep/status.json").write_text(
+              json.dumps({
+                  "scanner": "Semgrep",
+                  "execution_status": os.environ["SCAN_OUTCOME"]
+              }, indent=2)
+          )
+          PY
+
+      - name: Upload Semgrep results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: results/semgrep/
+          if-no-files-found: warn
+
+
+  gitleaks:
+    name: Gitleaks Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks
+        shell: bash
+        run: |
+          curl -sSfL \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            -o /tmp/gitleaks.tar.gz
+
+          tar -xzf /tmp/gitleaks.tar.gz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run Gitleaks
+        id: scan
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p results/gitleaks
+
+          gitleaks git \
+            --report-format json \
+            --report-path results/gitleaks/gitleaks.json \
+            --exit-code 0 \
+            .
+
+      - name: Record execution status
+        if: always()
+        shell: bash
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          mkdir -p results/gitleaks
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path("results/gitleaks/status.json").write_text(
+              json.dumps({
+                  "scanner": "Gitleaks",
+                  "execution_status": os.environ["SCAN_OUTCOME"]
+              }, indent=2)
+          )
+          PY
+
+      - name: Upload Gitleaks results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-results
+          path: results/gitleaks/
+          if-no-files-found: warn
+
+
+  trivy:
+    name: Trivy Vulnerability Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
+
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key |
+            gpg --dearmor |
+            sudo tee /usr/share/keyrings/trivy.gpg >/dev/null
+
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" |
+            sudo tee /etc/apt/sources.list.d/trivy.list
+
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Run Trivy
+        id: scan
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p results/trivy
+
+          trivy fs \
+            --scanners vuln,misconfig,secret \
+            --format json \
+            --exit-code 0 \
+            --output results/trivy/trivy.json \
+            .
+
+      - name: Record execution status
+        if: always()
+        shell: bash
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          mkdir -p results/trivy
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path("results/trivy/status.json").write_text(
+              json.dumps({
+                  "scanner": "Trivy",
+                  "execution_status": os.environ["SCAN_OUTCOME"]
+              }, indent=2)
+          )
+          PY
+
+      - name: Upload Trivy results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: results/trivy/
+          if-no-files-found: warn
+
+
+  sonarqube:
+    name: SonarQube Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Sonar token
+        id: token
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run SonarQube analysis
+        if: steps.token.outputs.available == 'true'
+        id: scan
+        continue-on-error: true
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=akashbalaji1410
+            -Dsonar.projectKey=Akashbalaji1410_ai-devsecops-lab
+            -Dsonar.host.url=https://sonarcloud.io
+
+      - name: Record Sonar status
+        if: always()
+        shell: bash
+        env:
+          TOKEN_AVAILABLE: ${{ steps.token.outputs.available }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          mkdir -p results/sonarqube
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          token = os.environ.get("TOKEN_AVAILABLE")
+          outcome = os.environ.get("SCAN_OUTCOME", "skipped")
+
+          status = (
+              "not_configured"
+              if token != "true"
+              else outcome
+          )
+
+          Path("results/sonarqube/status.json").write_text(
+              json.dumps({
+                  "scanner": "SonarQube Cloud",
+                  "execution_status": status,
+                  "note": "Full findings require a separate API export."
+              }, indent=2)
+          )
+          PY
+
+      - name: Upload Sonar status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-status
+          path: results/sonarqube/
+          if-no-files-found: warn
+
+
+  python-tests:
+    name: Custom Security Module Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run custom module tests
+        id: tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p results/python-tests
+
+          python -m unittest discover \
+            -s risk-correlation-lab \
+            -p "test_*.py" \
+            -v \
+            > results/python-tests/tests.log 2>&1
+
+          cat results/python-tests/tests.log
+
+      - name: Record test status
+        if: always()
+        shell: bash
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          mkdir -p results/python-tests
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path("results/python-tests/status.json").write_text(
+              json.dumps({
+                  "scanner": "Custom Python Tests",
+                  "execution_status": os.environ["TEST_OUTCOME"]
+              }, indent=2)
+          )
+          PY
+
+      - name: Upload Python test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-test-results
+          path: results/python-tests/
+          if-no-files-found: warn
+
+
+  summary:
+    name: Security Pipeline Summary
+    runs-on: ubuntu-latest
+    needs:
+      - semgrep
+      - gitleaks
+      - trivy
+      - sonarqube
+      - python-tests
+
+    if: always()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download security artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: collected-artifacts
+          pattern: "*results*"
+          merge-multiple: false
+
+      - name: Download Sonar status
+        uses: actions/download-artifact@v4
+        with:
+          path: collected-artifacts/sonarqube-status
+          name: sonarqube-status
+
+      - name: Generate security summary
+        run: |
+          python scripts/generate_ci_summary.py \
+            --input collected-artifacts \
+            --output results/security-summary.json
+
+      - name: Publish GitHub Actions summary
+        shell: bash
+        run: |
+          echo "## AI DevSecOps Security Pipeline" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat results/security-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload consolidated summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-pipeline-summary
+          path: |
+            results/security-summary.json
+            results/security-summary.md
+          if-no-files-found: warn
